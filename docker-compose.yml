@@ -1,0 +1,111 @@
+version: '3.8'
+
+services:
+  # mariadb-1
+  mariadb1:
+    image: mariadb:10.5
+    container_name: mariadb1
+    ports:
+      - "3307:3306"
+    env_file: .env
+    environment:
+      - MARIADB_USER=${MARIADB_USER_1}
+      - MARIADB_PASSWORD=${MARIADB_PASSWORD_1}
+      - MARIADB_DATABASE=${MARIADB_DATABASE_1}
+      - MARIADB_ROOT_PASSWORD=${MARIADB_ROOT_PASSWORD}
+    volumes:
+      - ./mariadb1/galera.cnf:/etc/mysql/mariadb.conf.d/galera.cnf
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    cap_add:
+      - all
+    networks:
+      - mariadb
+
+  # mariadb-2
+  mariadb2:
+    image: mariadb:10.5
+    container_name: mariadb2
+    ports:
+      - "3308:3306"
+    env_file: .env
+    environment:
+      - MARIADB_USER=${MARIADB_USER_2}
+      - MARIADB_PASSWORD=${MARIADB_PASSWORD_2}
+      - MARIADB_DATABASE=${MARIADB_DATABASE_2}
+      - MARIADB_ROOT_PASSWORD=${MARIADB_ROOT_PASSWORD}
+    volumes:
+      - ./mariadb2/galera.cnf:/etc/mysql/mariadb.conf.d/galera.cnf
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    cap_add:
+      - all
+    networks:
+      - mariadb
+    depends_on:
+      - mariadb1
+
+  db-loadbalancer:
+    image: mariadb/maxscale:24.02.1
+    container_name: db-loadbalancer
+    ports:
+      - "3309:3306"
+      - "8989:8989"
+    depends_on:
+      - mariadb1
+      - mariadb2
+    networks:
+      - mariadb
+    # volumes:
+    #   - ./maxscale.cnf:/etc/maxscale.cnf
+      
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0.0
+    container_name: keycloak
+    ports:
+      - "8080:8080"
+    environment:
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin
+    command: start-dev
+    networks:
+      - mariadb
+
+  python-app:
+    build: ./backend
+    ports:
+      - "5000:5000"
+    depends_on:
+      - keycloak
+      - db-loadbalancer
+    command: flask run --host 0.0.0.0
+
+  react-app:
+    build: ./frontend
+    ports:
+      - "80:3000"
+    depends_on:
+      - keycloak
+      - python-app
+    command: serve -s build
+
+  python-app-dev:
+    build: ./backend
+    ports:
+      - "5001:5002"
+    depends_on:
+      - keycloak
+      - db-loadbalancer
+    command: python app.py
+
+  react-app-dev:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - keycloak
+      - python-app-dev
+    command: npm start
+    
+networks:
+  mariadb:
+    driver: bridge

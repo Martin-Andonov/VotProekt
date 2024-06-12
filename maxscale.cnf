@@ -1,0 +1,63 @@
+[maxscale]
+threads=256
+admin_host=0.0.0.0
+writeq_high_water=65536
+writeq_high_water=1024
+admin_port=8989
+admin_gui=true
+
+[server1]
+type=server
+address=mariadb1
+port=3306
+protocol=MariaDBBackend
+monitoruser=admin
+monitorpw=admin
+
+[server2]
+type=server
+address=mariadb2
+port=3306
+protocol=MariaDBBackend
+monitoruser=admin
+monitorpw=admin
+
+[MariaDB-Monitor]
+type=monitor
+module=mariadbmon 
+servers=server1,server2 
+user=admin
+password=admin 
+monitor_interval=5000
+replication_user=admin
+replication_password=admin 
+backend_connect_timeout=2
+backend_write_timeout=2
+backend_read_timeout=2 
+backend_connect_attempts=1 
+master_conditions=connected_slave,running_slave 
+auto_failover=1
+auto_rejoin=1
+failcount=2 
+switchover_timeout=20 
+failover_timeout=20
+
+[Read-Write-Service] 
+type=service 
+router=readwritesplit 
+servers=server1,server2 
+user=admin
+password=admin 
+max_sescmd_history = 1500 
+causal_reads = 1
+causal_reads_timeout =1 0s
+transaction_replay = 1
+transaction_replay_max_size = 1Mi
+delayed_retry = 1
+master_reconnection = 1 
+master_failure_mode = fail_on_write
+
+[Read-Write-Listener] 
+type=listener 
+service=Read-Write-Service 
+protocol=MariaDBClient
